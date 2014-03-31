@@ -1,4 +1,5 @@
 #include <OneWire.h>
+#include <DallasTemperature.h>
 #include <UIPEthernet.h>
 
 // Data wire is plugged into pin 2 on the Arduino
@@ -6,20 +7,26 @@
 // Uncomment for verbose output
 // #define DEBUG
 
-OneWire  sensor_bus(ONE_WIRE_BUS);
+OneWire  oneWire(ONE_WIRE_BUS);
 
 // Probes
-uint8_t add1[8] = { 0x28, 0xC8, 0xCC, 0xBF, 0x04, 0x00, 0x00, 0xB6 };
-uint8_t add2[8] = { 0x28, 0xBA, 0x17, 0xD0, 0x04, 0x00, 0x00, 0x64 };
-uint8_t add3[8] = { 0x28, 0xE3, 0x67, 0xCE, 0x04, 0x00, 0x00, 0x9C };
+DeviceAddress add1 = { 0x28, 0xC8, 0xCC, 0xBF, 0x04, 0x00, 0x00, 0xB6 };
+DeviceAddress add2 = { 0x28, 0xBA, 0x17, 0xD0, 0x04, 0x00, 0x00, 0x64 };
+DeviceAddress add3 = { 0x28, 0xE3, 0x67, 0xCE, 0x04, 0x00, 0x00, 0x9C };
 
 // Indicator LEDs
 int led_15 = 5;
 int led_30 = 6;
 int led_100 = 7;
 
+#define COMMON_ANODE
+
+
 // Set up server on port 1000
 EthernetServer server = EthernetServer(1000);
+
+// Pass our oneWire reference to Dallas Temperature.
+DallasTemperature sensors(&oneWire);
 
 void setup(void)
 {
@@ -36,9 +43,16 @@ void setup(void)
   IPAddress myIP(192,168,100,6);
   Ethernet.begin(mac,myIP);
 
-  Serial.println("Setup 3.");
   // Start Server
   server.begin();
+
+  // Start up the library
+  sensors.begin();
+  // set the resolution to 10 bit (good enough?)
+  sensors.setResolution(add1, 12);
+  sensors.setResolution(add2, 12);
+  sensors.setResolution(add3, 12);
+
 }
  
  
@@ -50,9 +64,10 @@ void loop(void)
   float t_100;
 
   // Get temperature outside the ethernet part
-  t_15 = get_temperature(add1);
-  t_30 = get_temperature(add2);
-  t_100 = get_temperature(add3);
+  sensors.requestTemperatures();
+  t_15 = sensors.getTempC(add1);
+  t_30 = sensors.getTempC(add2);
+  t_100 = sensors.getTempC(add3);
 
   // Check lights
   is_ok(t_15, led_15);
@@ -74,47 +89,16 @@ void loop(void)
     client.print(", ");
     client.stop();
   }
+
 }
 
 void is_ok(float t, int led) {
 #ifdef DEBUG
   delay(1000);
 #endif
-  if (t == 85.0) {
+  if (t == 85.0 || t == -127.0) {
     digitalWrite(led, LOW);
   } else {
     digitalWrite(led, HIGH);
   }
-}
-
-int get_temperature(uint8_t *address) {
-
-  byte data[12];
-  int HighByte, LowByte, TReading, SignBit, x;
-
-  sensor_bus.reset();
-  sensor_bus.select(address);
-  sensor_bus.write(0x44,1);
- 
-  sensor_bus.reset();
-  sensor_bus.select(address);
-  sensor_bus.write(0xBE,1);
- 
-  // Read in 9 bytes
-  for(x=0; x<9; x++){
-    data[x] = sensor_bus.read();
-  }
-  
-  LowByte = data[0];
-  HighByte = data[1];
-  TReading = (HighByte << 8) + LowByte;
-  SignBit = TReading & 0x8000;  // test most sig bit
-
-  // Test for negative
-  if (SignBit) {
-    TReading = (TReading ^ 0xffff) + 1; // 2's comp
-  }
-
-  return TReading;
-  // return (float) TReading * (float) 0.0625; 
 }
