@@ -26,27 +26,25 @@ void setup(void)
  
 void loop(void)
 {
-  int t_15;
-  int t_30;
-  int t_100;
+  float t_15;
+  float t_30;
+  float t_100;
 
   // Get temperature outside the ethernet part
-  // t_15 = 
-  //get_temperature(add1);
-  //t_30 = 
-  //get_temperature(add2);
-  //t_100 = 
-  get_temperature(add3);
-  //Serial.println("------------------------------");
+  t_15 = get_temperature(add1);
+  t_30 = get_temperature(add2);
+  t_100 = get_temperature(add3);
 
-  delay(2000);
+  Serial.println(t_15);
+  Serial.println(t_30);
+  Serial.println(t_100);
+  delay(3000);
 }
 
-void get_temperature(uint8_t *address) {
+float get_temperature(uint8_t *address) {
 
   byte data[12];
   int HighByte, LowByte, TReading, SignBit, x;
-  float fooooo;
 
   sensor_bus.reset();
   sensor_bus.select(address);
@@ -68,14 +66,8 @@ void get_temperature(uint8_t *address) {
 
   // SignBit == -32768 when negative, 0 otherwise.
   if (SignBit) {
-    TReading = 0 - (TReading ^ 0xffff) + 1; // 2's comp
+    TReading = 0 - ((TReading ^ 0xffff) + 1); // 2's comp
   }
-  Serial.print(SignBit);
-  Serial.print(" : ");
-  Serial.print(TReading);
-  //return TReading;
-  // return (float) TReading * (float) 0.0625; 
-  fooooo = (float) TReading * (float) 0.0625;
-  Serial.print(" : ");
-  Serial.println(fooooo);
+
+  return (float) TReading * (float) 0.0625; 
 }
