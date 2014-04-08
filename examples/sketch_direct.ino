@@ -19,9 +19,6 @@ int led_15 = 5;
 int led_30 = 6;
 int led_100 = 7;
 
-#define COMMON_ANODE
-
-
 // Set up server on port 1000
 EthernetServer server = EthernetServer(1000);
 
@@ -70,9 +67,9 @@ void loop(void)
   t_100 = sensors.getTempC(add3);
 
   // Check lights
-  is_ok(t_15, led_15);
-  is_ok(t_30, led_30);
-  is_ok(t_100, led_100);
+  device_check(t_15, led_15);
+  device_check(t_30, led_30);
+  device_check(t_100, led_100);
 
   if (EthernetClient client = server.available()) {
     while((size = client.available()) > 0) {
@@ -90,15 +87,34 @@ void loop(void)
     client.stop();
   }
 
+    Serial.print(t_15);
+    Serial.print(", ");
+    Serial.print(t_30);
+    Serial.print(", ");
+    Serial.print(t_100);
+    Serial.println(", ");
+
 }
 
-void is_ok(float t, int led) {
+void device_check(float t, int led) {
 #ifdef DEBUG
   delay(1000);
 #endif
   if (t == 85.0 || t == -127.0) {
-    digitalWrite(led, LOW);
+    alert(led);
   } else {
-    digitalWrite(led, HIGH);
+    ok(led);
   }
+}
+
+void alert(int pin)
+{
+  // Makes RED
+  digitalWrite(pin, HIGH);
+}
+
+void ok(int pin)
+{
+  // Makes GREEN
+  digitalWrite(pin, LOW);
 }

@@ -1,0 +1,99 @@
+#include <OneWire.h>
+#include <UIPEthernet.h>
+
+// Data wire is plugged into pin 2 on the Arduino
+#define ONE_WIRE_BUS 3
+// Uncomment for verbose output
+// #define DEBUG
+// Scratchpad locations
+#define TEMP_LSB        0
+#define TEMP_MSB        1
+#define HIGH_ALARM_TEMP 2
+#define LOW_ALARM_TEMP  3
+#define CONFIGURATION   4
+#define INTERNAL_BYTE   5
+#define COUNT_REMAIN    6
+#define COUNT_PER_C     7
+#define SCRATCHPAD_CRC  8
+
+OneWire  sensor_bus(ONE_WIRE_BUS);
+
+// Probes
+uint8_t add1[8] = { 0x28, 0xC8, 0xCC, 0xBF, 0x04, 0x00, 0x00, 0xB6 };
+//uint8_t add2[8] = { 0x28, 0xBA, 0x17, 0xD0, 0x04, 0x00, 0x00, 0x64 };
+//uint8_t add3[8] = { 0x28, 0xE3, 0x67, 0xCE, 0x04, 0x00, 0x00, 0x9C };
+
+
+// Set up server on port 1000
+EthernetServer server = EthernetServer(1000);
+
+void setup(void)
+{
+  // start serial port
+  Serial.begin(9600);
+}
+ 
+ 
+void loop(void)
+{
+  float t_15;
+  //float t_30;
+  //float t_100;
+
+  // Get temperature outside the ethernet part
+  t_15 = get_temperature(add1);
+  //t_30 = get_temperature(add2);
+  //t_100 = get_temperature(add3);
+
+  //Serial.println(t_15);
+  //Serial.println(t_30);
+  //Serial.println(t_100);
+  delay(5000);
+}
+
+float get_temperature(uint8_t *address) {
+
+  byte data[12];
+  int t_lsb, t_msb, t_hi_alarm, t_lo_alarm, t_read, sign_bit, x;
+
+  sensor_bus.reset();
+  sensor_bus.select(address);
+  sensor_bus.write(0x44,1);
+ 
+  sensor_bus.reset();
+  sensor_bus.select(address);
+  sensor_bus.write(0xBE,1);
+ 
+  // Read in 9 bytes
+  for(x=0; x<9; x++){
+    data[x] = sensor_bus.read();
+  }
+  
+  t_msb = data[TEMP_LSB];
+  t_lsb = data[TEMP_MSB];
+  t_hi_alarm = data[HIGH_ALARM_TEMP];
+  t_lo_alarm = data[LOW_ALARM_TEMP];
+
+  t_read = (t_lsb << 8) + t_msb;
+  sign_bit = t_read & 0x8000;  // test most sig bit
+
+  Serial.print("HI: ");
+  Serial.print(t_hi_alarm);
+  Serial.print(" LO: ");
+  Serial.print(t_lo_alarm);
+  //Serial.print(" t_read-pre: ");
+  //Serial.print(t_read);
+
+  // sign_bit == -32768 when negative, 0 otherwise.
+  if (sign_bit) {
+    t_read = 0 - ((t_read ^ 0xffff) + 1); // 2's comp
+  }
+  //Serial.print(" sign_bit: ");
+  //Serial.print(sign_bit);
+  Serial.print(" t_read-post: ");
+  Serial.print(t_read);
+  Serial.print(" Float: ");
+  Serial.println((float) t_read * (float) 0.0625);
+  Serial.println("//");
+  return (float) t_read * (float) 0.0625; 
+}

@@ -1,0 +1,47 @@
+const int a = 4;
+const int b = 5;
+const int c = 6;
+const int d = 7;
+const int e = 8;
+
+void setup()
+{
+  pinMode(a, OUTPUT);
+  pinMode(b, OUTPUT);
+  pinMode(c, OUTPUT);
+  pinMode(d, OUTPUT);
+  pinMode(e, OUTPUT);
+}
+
+void loop()
+{
+  ok(a);
+  alert(b);
+  ok(c);
+  alert(d);
+  ok(e);
+}
+
+void flipflop(int bicolour)
+{
+  int del = 60;
+
+  //red
+  alert(bicolour);
+  delay(del);
+  //green
+  ok(bicolour);
+  delay(del/40);
+}
+
+void alert(int pin)
+{
+  // Makes RED
+  digitalWrite(pin, HIGH);
+}
+
+void ok(int pin)
+{
+  // Makes GREEN
+  digitalWrite(pin, LOW);
+}

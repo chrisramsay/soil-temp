@@ -1,25 +1,33 @@
 #include <OneWire.h>
+#include <dht.h>
+#include <DallasTemperature.h>
 #include <UIPEthernet.h>
 
 // Data wire is plugged into pin 2 on the Arduino
 #define ONE_WIRE_BUS 3
 // Uncomment for verbose output
 // #define DEBUG
+// DHT 22
+#define DHT22_PIN 2
+dht DHT;
 
-OneWire  sensor_bus(ONE_WIRE_BUS);
+OneWire  oneWire(ONE_WIRE_BUS);
 
 // Probes
-uint8_t add1[8] = { 0x28, 0xC8, 0xCC, 0xBF, 0x04, 0x00, 0x00, 0xB6 };
-uint8_t add2[8] = { 0x28, 0xBA, 0x17, 0xD0, 0x04, 0x00, 0x00, 0x64 };
-uint8_t add3[8] = { 0x28, 0xE3, 0x67, 0xCE, 0x04, 0x00, 0x00, 0x9C };
+DeviceAddress add1 = { 0x28, 0xC8, 0xCC, 0xBF, 0x04, 0x00, 0x00, 0xB6 };
+DeviceAddress add2 = { 0x28, 0xBA, 0x17, 0xD0, 0x04, 0x00, 0x00, 0x64 };
+DeviceAddress add3 = { 0x28, 0xE3, 0x67, 0xCE, 0x04, 0x00, 0x00, 0x9C };
 
 // Indicator LEDs
-int led_15 = 5;
-int led_30 = 6;
-int led_100 = 7;
+int led_15 = 4;
+int led_30 = 5;
+int led_100 = 6;
 
 // Set up server on port 1000
 EthernetServer server = EthernetServer(1000);
+
+// Pass our oneWire reference to Dallas Temperature.
+DallasTemperature sensors(&oneWire);
 
 void setup(void)
 {
@@ -36,9 +44,15 @@ void setup(void)
   IPAddress myIP(192,168,100,6);
   Ethernet.begin(mac,myIP);
 
-  Serial.println("Setup 3.");
   // Start Server
   server.begin();
+
+  // Start up the library, resolution 12 bit
+  sensors.begin();
+  sensors.setResolution(add1, 12);
+  sensors.setResolution(add2, 12);
+  sensors.setResolution(add3, 12);
+
 }
  
  
@@ -48,16 +62,21 @@ void loop(void)
   float t_15;
   float t_30;
   float t_100;
+  float dewpt;
+  EthernetClient client = server.available();
 
   // Get temperature outside the ethernet part
-  t_15 = get_temperature(add1);
-  t_30 = get_temperature(add2);
-  t_100 = get_temperature(add3);
+  sensors.requestTemperatures();
+  t_15 = sensors.getTempC(add1);
+  t_30 = sensors.getTempC(add2);
+  t_100 = sensors.getTempC(add3);
+  DHT.read22(DHT22_PIN);
+  dewpt = dewPoint(DHT.temperature, DHT.humidity);
 
   // Check lights
-  is_ok(t_15, led_15);
-  is_ok(t_30, led_30);
-  is_ok(t_100, led_100);
+  device_check(t_15, led_15);
+  device_check(t_30, led_30);
+  device_check(t_100, led_100);
 
   if (EthernetClient client = server.available()) {
     while((size = client.available()) > 0) {
@@ -74,47 +93,50 @@ void loop(void)
     client.print(", ");
     client.stop();
   }
+
 }
 
-void is_ok(float t, int led) {
+void device_check(float t, int led) {
 #ifdef DEBUG
   delay(1000);
 #endif
-  if (t == 85.0) {
-    digitalWrite(led, LOW);
+  if (t >= 85.0 || t <= -127.0) {
+    alert(led);
   } else {
-    digitalWrite(led, HIGH);
+    ok(led);
   }
 }
 
-int get_temperature(uint8_t *address) {
+void alert(int pin)
+{
+  // Makes RED
+  digitalWrite(pin, HIGH);
+}
 
-  byte data[12];
-  int HighByte, LowByte, TReading, SignBit, x;
+void ok(int pin)
+{
+  // Makes GREEN
+  digitalWrite(pin, LOW);
+}
 
-  sensor_bus.reset();
-  sensor_bus.select(address);
-  sensor_bus.write(0x44,1);
- 
-  sensor_bus.reset();
-  sensor_bus.select(address);
-  sensor_bus.write(0xBE,1);
- 
-  // Read in 9 bytes
-  for(x=0; x<9; x++){
-    data[x] = sensor_bus.read();
-  }
-  
-  LowByte = data[0];
-  HighByte = data[1];
-  TReading = (HighByte << 8) + LowByte;
-  SignBit = TReading & 0x8000;  // test most sig bit
+// dewPoint function NOAA
+// reference (1) : http://wahiduddin.net/calc/density_algorithms.htm
+// reference (2) : http://www.colorado.edu/geography/weather_station/Geog_site/about.htm
+//
+double dewPoint(double celsius, double humidity)
+{
+    // (1) Saturation Vapor Pressure = ESGG(T)
+    double RATIO = 373.15 / (273.15 + celsius);
+    double RHS = -7.90298 * (RATIO - 1);
+    RHS += 5.02808 * log10(RATIO);
+    RHS += -1.3816e-7 * (pow(10, (11.344 * (1 - 1/RATIO ))) - 1) ;
+    RHS += 8.1328e-3 * (pow(10, (-3.49149 * (RATIO - 1))) - 1) ;
+    RHS += log10(1013.246);
 
-  // Test for negative
-  if (SignBit) {
-    TReading = (TReading ^ 0xffff) + 1; // 2's comp
-  }
+    // factor -3 is to adjust units - Vapor Pressure SVP * humidity
+    double VP = pow(10, RHS - 3) * humidity;
 
-  return TReading;
-  // return (float) TReading * (float) 0.0625; 
+    // (2) DEWPOINT = F(Vapor Pressure)
+    double T = log(VP/0.61078);   // temp var
+    return (241.88 * T) / (17.558 - T);
 }
